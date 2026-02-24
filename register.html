@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تسجيل موظف جديد</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- FingerprintJS -->
+    <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>تسجيل موظف جديد</h1>
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="name">الاسم الكامل:</label>
+                <input type="text" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">رقم الهاتف:</label>
+                <input type="tel" id="phone" required>
+            </div>
+            <button type="submit">تسجيل</button>
+        </form>
+        <div id="message" class="message"></div>
+    </div>
+
+    <script type="module">
+        // استيراد Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAxAkxGdsJ2-XwSgfMcoH4oITpG5xkAg3U",
+            authDomain: "attendance-system-e9656.firebaseapp.com",
+            projectId: "attendance-system-e9656",
+            storageBucket: "attendance-system-e9656.firebasestorage.app",
+            messagingSenderId: "531814637270",
+            appId: "1:531814637270:web:3685a1b276f2b4b2b7f377",
+            measurementId: "G-5S5XQTY2VK"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // التعامل مع نموذج التسجيل
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const messageDiv = document.getElementById('message');
+            const name = document.getElementById('name').value;
+            const phone = document.getElementById('phone').value;
+            
+            try {
+                // الحصول على بصمة الجهاز
+                const fp = await FingerprintJS.load();
+                const result = await fp.get();
+                const deviceId = result.visitorId;
+                
+                // حفظ الموظف في Firestore
+                const employeesRef = collection(db, 'employees');
+                const docRef = await addDoc(employeesRef, {
+                    name: name,
+                    phone: phone,
+                    deviceId: deviceId,
+                    registeredAt: serverTimestamp()
+                });
+                
+                // تسجيل حضور أولي
+                const attendanceRef = collection(db, 'attendance');
+                await addDoc(attendanceRef, {
+                    employeeId: docRef.id,
+                    time: serverTimestamp()
+                });
+                
+                messageDiv.className = 'message success';
+                messageDiv.textContent = 'تم التسجيل بنجاح! سيتم تحويلك إلى صفحة الحضور...';
+                
+                // الانتقال إلى الصفحة الرئيسية بعد 2 ثانية
+                setTimeout(() => {
+                    window.location.href = 'index.html';
+                }, 2000);
+                
+            } catch (error) {
+                messageDiv.className = 'message error';
+                messageDiv.textContent = 'خطأ في التسجيل: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>

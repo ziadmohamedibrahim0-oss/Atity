@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة الإدارة</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- SheetJS لتصدير Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>لوحة الإدارة</h1>
+        
+        <!-- حماية بكلمة مرور -->
+        <div id="loginSection">
+            <input type="password" id="adminPassword" placeholder="كلمة المرور">
+            <button id="loginBtn">دخول</button>
+        </div>
+        
+        <div id="adminPanel" style="display: none;">
+            <button id="exportBtn" class="btn">تحميل Excel</button>
+            <table id="attendanceTable">
+                <thead>
+                    <tr>
+                        <th>الموظف</th>
+                        <th>الهاتف</th>
+                        <th>التاريخ</th>
+                        <th>الوقت</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script type="module">
+        // استيراد Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-app.js";
+        import { getFirestore, collection, query, getDocs, orderBy, doc, getDoc } from "https://www.gstatic.com/firebasejs/12.9.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAxAkxGdsJ2-XwSgfMcoH4oITpG5xkAg3U",
+            authDomain: "attendance-system-e9656.firebaseapp.com",
+            projectId: "attendance-system-e9656",
+            storageBucket: "attendance-system-e9656.firebasestorage.app",
+            messagingSenderId: "531814637270",
+            appId: "1:531814637270:web:3685a1b276f2b4b2b7f377",
+            measurementId: "G-5S5XQTY2VK"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // كلمة المرور (يمكنك تغييرها)
+        const ADMIN_PASSWORD = "admin123";
+
+        // عناصر الصفحة
+        const loginSection = document.getElementById('loginSection');
+        const adminPanel = document.getElementById('adminPanel');
+        const loginBtn = document.getElementById('loginBtn');
+        const exportBtn = document.getElementById('exportBtn');
+        const passwordInput = document.getElementById('adminPassword');
+        const tbody = document.querySelector('#attendanceTable tbody');
+
+        // دالة تحميل الحضور
+        async function loadAttendance() {
+            tbody.innerHTML = '<tr><td colspan="4">جاري التحميل...</td></tr>';
+            
+            try {
+                const attendanceRef = collection(db, 'attendance');
+                const q = query(attendanceRef, orderBy('time', 'desc'));
+                const attendanceSnapshot = await getDocs(q);
+                
+                if (attendanceSnapshot.empty) {
+                    tbody.innerHTML = '<tr><td colspan="4">لا توجد سجلات</td></tr>';
+                    return;
+                }
+                
+                let rows = '';
+                for (const attDoc of attendanceSnapshot.docs) {
+                    const attData = attDoc.data();
+                    // جلب بيانات الموظف
+                    const employeeRef = doc(db, 'employees', attData.employeeId);
+                    const employeeSnap = await getDoc(employeeRef);
+                    const empData = employeeSnap.exists() ? employeeSnap.data() : { name: 'غير معروف', phone: '' };
+                    
+                    const date = attData.time?.toDate() || new Date();
+                    rows += `<tr>
+                        <td>${empData.name}</td>
+                        <td>${empData.phone}</td>
+                        <td>${date.toLocaleDateString('ar-EG')}</td>
+                        <td>${date.toLocaleTimeString('ar-EG')}</td>
+                    </tr>`;
+                }
+                tbody.innerHTML = rows;
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="4">خطأ في التحميل: ${error.message}</td></tr>`;
+            }
+        }
+
+        // دالة تصدير Excel
+        async function exportToExcel() {
+            try {
+                const attendanceRef = collection(db, 'attendance');
+                const q = query(attendanceRef, orderBy('time', 'desc'));
+                const attendanceSnapshot = await getDocs(q);
+                
+                const data = [];
+                for (const attDoc of attendanceSnapshot.docs) {
+                    const attData = attDoc.data();
+                    const employeeRef = doc(db, 'employees', attData.employeeId);
+                    const employeeSnap = await getDoc(employeeRef);
+                    const empData = employeeSnap.exists() ? employeeSnap.data() : { name: '', phone: '' };
+                    
+                    const date = attData.time?.toDate() || new Date();
+                    data.push({
+                        'الموظف': empData.name,
+                        'الهاتف': empData.phone,
+                        'التاريخ': date.toLocaleDateString('ar-EG'),
+                        'الوقت': date.toLocaleTimeString('ar-EG')
+                    });
+                }
+                
+                const wb = XLSX.utils.book_new();
+                const ws = XLSX.utils.json_to_sheet(data);
+                XLSX.utils.book_append_sheet(wb, ws, "الحضور");
+                XLSX.writeFile(wb, "تقرير_الحضور.xlsx");
+            } catch (error) {
+                alert('خطأ في تصدير Excel: ' + error.message);
+            }
+        }
+
+        // مستمعات الأحداث
+        loginBtn.addEventListener('click', () => {
+            const pwd = passwordInput.value;
+            if (pwd === ADMIN_PASSWORD) {
+                loginSection.style.display = 'none';
+                adminPanel.style.display = 'block';
+                loadAttendance();
+            } else {
+                alert('كلمة مرور خاطئة');
+            }
+        });
+
+        exportBtn.addEventListener('click', exportToExcel);
+    </script>
+</body>
+</html>
